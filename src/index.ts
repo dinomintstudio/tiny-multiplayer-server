@@ -51,18 +51,28 @@ server.on('connection', (ws, request) => {
     clients.set(client.id, client)
 
     log(`client connected #${client.id} on path ${path}`)
+
     const ids = [...clients.values()].map(c => `#${c.id}`).join(', ')
     log(`active connections on ${path}: ${clients.size} { ${ids} }`)
 
     ws.on('message', (message: string) => log(message))
 
+    ws.on('ping', () => ws.pong())
+
     ws.on('close', () => {
         log(`client disconnected: #${client.id} ${path}`)
         clients.delete(client.id)
+        broadcast(JSON.stringify({ type: 'peer-disconnected', peer: { id: client.id } }))
     })
+
+    ws.send(JSON.stringify({ type: 'you', peer: { id: client.id } }))
+    ;[...clients.values()]
+        .filter(c => c.id !== client.id)
+        .forEach(c => ws.send(JSON.stringify({ type: 'peer-connected', peer: { id: c.id } })))
+    broadcast(JSON.stringify({ type: 'peer-connected', peer: { id: client.id } }))
 })
 
-const broadcast = (path: string) => {
-    log(`broadcasting: ${path}`)
-    return clients.forEach(c => c.ws.send('open'))
+const broadcast = (msg: any) => {
+    log(`broadcasting: ${msg}`)
+    return clients.forEach(c => c.ws.send(msg))
 }
