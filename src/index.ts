@@ -29,6 +29,7 @@ const app = express()
 const clients: Map<string, WsClient> = new Map<string, WsClient>()
 
 app.get(`/`, (request: Request, response: Response) => {
+    log(request)
     response.status(200).json([])
 })
 
@@ -55,7 +56,27 @@ server.on('connection', (ws, request) => {
     const ids = [...clients.values()].map(c => `#${c.id}`).join(', ')
     log(`active connections on ${path}: ${clients.size} { ${ids} }`)
 
-    ws.on('message', (message: string) => log(message))
+    ws.on('message', (rawMsg: Buffer) => {
+        const msg = rawMsg.toString()
+        log(msg)
+        const data = parseMessage(msg)
+        switch (data?.type) {
+            case 'new-ice-candidate':
+            case 'data-offer':
+            case 'data-answer': {
+                if (!('target' in data)) return
+                const target = data.target
+                const targetClient = clients.get(target)
+                if (targetClient) {
+                    log(`forwarding ${data.type} to #${target}`)
+                    targetClient.ws.send(msg)
+                } else {
+                    log(`no target #${target}`)
+                }
+                break
+            }
+        }
+    })
 
     ws.on('ping', () => ws.pong())
 
@@ -71,6 +92,16 @@ server.on('connection', (ws, request) => {
         .forEach(c => ws.send(JSON.stringify({ type: 'peer-connected', peer: { id: c.id } })))
     broadcast(JSON.stringify({ type: 'peer-connected', peer: { id: client.id } }))
 })
+
+const parseMessage = (message: string): { type: string; [key: string]: any } | undefined => {
+    try {
+        const obj = JSON.parse(message)
+        if (typeof obj !== 'object' || !('type' in obj)) return
+        return obj
+    } catch (e) {
+        return undefined
+    }
+}
 
 const broadcast = (msg: any) => {
     log(`broadcasting: ${msg}`)
