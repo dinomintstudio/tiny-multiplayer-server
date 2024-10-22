@@ -2,9 +2,9 @@
 
 Multiplayer POC using WebRTC
 
-## Requirements
+## STUN/TURN server
 
-TURN server:
+App should work relying on the default servers, but a custom one can be provided
 
 ```sh
 turnserver --log-file stdout --user turn:turn
